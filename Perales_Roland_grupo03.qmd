@@ -1,0 +1,117 @@
+---
+title: "PC4-1"
+author: "Roland E.Perales Inocente"
+format: html
+editor: visual
+---
+
+## 1. Activacion de paquetes
+
+```{r}
+library(factoextra)
+library(cluster)
+library(here)
+library(rio)
+library(tidyverse)
+```
+
+## 2. Importacion de base de datos grupo 03"almac_sangre.csv"
+
+```{r}
+data_sangre <- import(here("data", "almac_sangre.csv"))
+```
+
+## 3.Análisis de agrupamiento herarquico (Hierarchical Clustering)
+
+## 3.1 Depuracion de variables categoricas
+
+```{r}
+data_sangre1 = data_sangre |>
+  select(where(is.numeric)) |>
+  drop_na()
+```
+
+## 3.2 Estandarizacion
+
+```{r}
+data_sangreE = scale(data_sangre1)
+head(data_sangreE)
+```
+
+## 3.3 Calculo de distancias
+
+```{r}
+dist_data_sangreE <- dist(data_sangreE, method = "euclidean")
+```
+
+## 3.4 Visualizando las distancias euclidianas con un mapa de calor
+
+```{r}
+fviz_dist(dist_data_sangreE)
+```
+
+**predominantemente de color rosa pálido/rojizo**. Esto indica que la gran mayoría de los pacientes tienen una baja disimilaridad entre ellos. Es decir, sus características numéricas (Edad, PSA, Volumen, etc.) son bastante parecidas matemáticamente y no se separan naturalmente en grupos muy distintos.
+
+No se observan bloques cuadrados definidos, la transición es suave y uniforme, sugiriendo que en las variables actuales el algoritmo no está encontrando subgrupos claros de pacientes.
+
+Franja de color azul/morado intenso en esquina superior derecha: Los últimos pacientes son muy diferentes al resto de la población estudiada, tienen una distancia alta respecto a la mayoría. Podrían ser casos con valores extremos (un PSA inusualmente alto o un volumen tumoral masivo) que se salen de la norma.
+
+## 3.5Linkage: **método de varianza mínima de Ward**
+
+```{r}
+dist_link_data_sangreE <- hclust(d = dist_data_sangreE, method = "ward.D2")
+```
+
+## 3.6 Dendogramas
+
+```{r}
+fviz_dend(dist_link_data_sangreE, cex = 0.7)
+```
+
+```{r}
+fviz_dend(dist_link_data_sangreE, 
+          k = 3,                        
+          cex = 0.5,                    
+          k_colors = c("#2E9FDF", "#E7B800", "#FC4E07"), 
+          color_labels_by_k = TRUE,     
+          rect = TRUE,                  
+          rect_border = "gray",         
+          rect_fill = TRUE,             
+          main = "Dendrograma de Cáncer de Próstata" 
+)
+```
+
+El análisis sugiere que los pacientes se agrupan en tres perfiles clínicos distintos: un grupo mayoritario (Azul) que representa el caso típico y se diferencia claramente de los otros dos, y dos grupos más cercanos entre sí (Amarillo y Naranja), uno intermedio y otro más compacto. La distancia entre ramas indica que los perfiles Azul presentan características clínicas muy distintas (por ejemplo, PSA o edad) respecto a los otros, mientras que Amarillo y Naranja comparten mayor similitud.
+
+## 4. Agrupamiento con el algoritmo K-Means
+
+```{r}
+fviz_nbclust(data_sangreE, kmeans, nstart = 25, method = "wss") + 
+  geom_vline(xintercept = 3, linetype = 2)
+```
+
+El numero optimo de clusters es 3
+
+## 4.1 Cálculo del agrupamiento k-means
+
+```{r}
+set.seed(123)
+sangre_km <- kmeans(data_sangreE, 3, nstart = 25)
+sangre_km
+```
+
+## 4.2 Visualización de los clústeres k-means
+
+```{r}
+fviz_cluster(
+  object = sangre_km,           
+  data = data_sangreE,          
+  palette = c("#2E9FDF", "#E7B800", "#FC4E07"), 
+  ellipse.type = "euclid",      
+  repel = TRUE,                 
+  ggtheme = theme_minimal(),    
+  main = "Gráfico de Clusters - Cáncer de Próstata" 
+)
+```
+
+El gráfico visualiza la segmentación de los pacientes en tres clusters proyectados sobre dos dimensiones principales que explican el 42.7% de la variabilidad total de los datos. La densa concentración de líneas y puntos en el centro, donde se solapan los colores azul, rojo y amarillo, indica que existe una homogeneidad clínica considerable entre los pacientes promedio de los tres grupos; es decir, no existen barreras rígidas que separen "sanos" de "enfermos", sino más bien un espectro continuo de características. Sin embargo, se observa una distinción clara en los extremos, especialmente con el Cluster 2 (Amarillo), que se dispersa notablemente hacia el cuadrante superior derecho. Esto confirma visualmente que este grupo contiene a los pacientes con los valores más atípicos y extremos (como PSA y volumen tumoral muy elevados), diferenciándose claramente de la población estándar (azul) que se mantiene más agrupada y céntrica.

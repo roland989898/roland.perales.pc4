@@ -1,0 +1,236 @@
+---
+title: "PC3-1"
+author: "Roland Ever Perales Inocente"
+format: html
+editor: visual
+---
+
+## 1. Activacion de paquetes
+
+```{r}
+library(tidyverse)
+library(lubridate)
+library(survival)
+library(survminer)
+library(gtsummary)
+library(broom)
+library(here)
+library(rio)
+library(ggsurvfit)
+```
+
+## 2. Importacion y resumen de base de datos grupo 03"almac_sangre.csv"
+
+```{r}
+data_sangre <- import(here("data", "almac_sangre.csv"))
+data_sangre |> 
+  select(Tiempo_hasta_recurrencia, Recurrencia_bioquimica  , Raza_afroamericana      ) |> 
+  summary()
+```
+
+### **Debido a que nuestra variable Recurrencia_bioquimica es de "Si" y "No", creamos una nueva columna de datos con 1 y 0 para nuestro Evento-Censura**
+
+```{r}
+data_sangre <- data_sangre %>%
+  dplyr::mutate(
+    Estado_Recurrencia = dplyr::if_else(
+      Recurrencia_bioquimica == "Sí",
+      1, 0))
+
+print(head(data_sangre[c("Recurrencia_bioquimica", "Estado_Recurrencia")]))
+```
+
+Verificamos:
+
+```{r}
+data_sangre |> 
+  select(Tiempo_hasta_recurrencia, Estado_Recurrencia  , Raza_afroamericana      ) |> 
+  summary()
+```
+
+## 3. Analisis de supervivencia, Metodo Kaplan-Meier
+
+Se usaran las variables:
+
+-   Tiempo_hasta_recurrencia: **tiempo de seguimiento** **en Meses**
+
+-   Estado_Recurrencia: **Evento (1) = "Sí" o Censura (0) = "No"**
+
+-   Raza_afroamericana: **factor de comparacion "No" o "Sí"**
+
+## 3.1 Desenlace
+
+```{r}
+Surv(data_sangre$Tiempo_hasta_recurrencia, data_sangre$Estado_Recurrencia)
+```
+
+## 3.2 Variable respuesta
+
+```{r}
+Km_sangre = survfit(Surv(Tiempo_hasta_recurrencia, Estado_Recurrencia) ~ 1, data = data_sangre)
+str(Km_sangre)
+```
+
+Curva de superviencia global sin predictores, combina el **tiempo** hasta la recurrencia con la **variable de estado**
+
+## 3.3 Grafico de Kaplan-meier
+
+```{r}
+survfit2(Surv(Tiempo_hasta_recurrencia, Estado_Recurrencia) ~ 1, data = data_sangre) |>  
+  ggsurvfit() +
+  labs(
+    x = "Tiempo (Meses) hasta la Recurrencia",
+    y = "Probabilidad de No Recurrencia Bioquímica"
+  ) + 
+  add_censor_mark() +
+  add_confidence_interval() +
+  add_risktable()
+```
+
+El grafico muestra la evolucion de la probabilidad de que los pacientes permanezcan libres de recurrencia bioquímica a lo largo del tiempo, medido en meses desde el inicio del estudio. En el eje vertical se representa la función de supervivencia 𝑆 ( 𝑡 ) , que comienza en 1.0 (100%) y disminuye con cada evento de recurrencia. El eje horizontal indica el tiempo de seguimiento.
+
+Al inicio, la probabilidad de no recurrencia es total, pero disminuye más rápidamente en los primeros meses, lo que sugiere una mayor tasa de eventos tempranos. Por ejemplo, a los 25 meses, la probabilidad de no recurrencia es de aproximadamente 88%, y a los 50 meses baja a cerca del 78%.
+
+La banda gris que representa el intervalo de confianza del 95%, mostrando la incertidumbre en la estimación, especialmente en los tramos finales donde hay menos pacientes en seguimiento. Una sombra más ancha (como la que se ve después de los 75 meses) indica mayor incertidumbre debido a la disminución de pacientes en riesgo.
+
+También se observan marcas de censura (cruces negras), que indican pacientes que no presentaron recurrencia pero dejaron de ser seguidos por diversas razones.
+
+Finalmente, la tabla de riesgo complementa la visualización mostrando cuántos pacientes siguen en observación y cuántos eventos se han acumulado en cada intervalo de tiempo.
+
+## 3.4 Supervivencia en 1 año
+
+```{r}
+summary(survfit(Surv(Tiempo_hasta_recurrencia, Estado_Recurrencia) ~ 1, data = data_sangre), times = 12.00)
+```
+
+La probabilidad de supervivencia al año de seguimiento es del 91%. El 41% de los pacientes estuvieron vivos un año despues del inicio del estudio.
+
+```{r}
+survfit2(Surv(Tiempo_hasta_recurrencia, Estado_Recurrencia) ~ 1, data = data_sangre) |>
+  ggsurvfit() +
+  labs(
+    x = "Meses",
+    y = "Probabilidad de supervivencia global"
+  ) + 
+  add_confidence_interval() +
+  add_risktable() +
+  add_quantile(x_value = 12.00, linewidth = .7)
+```
+
+Línea de Cuantil Clave: 12 Meses
+
+La línea discontinua comienza en el eje X en 12 meses y se extiende verticalmente hasta que cruza la curva de Kaplan-Meier y determina que la probabilidad de supervivencia se sitúa por debajo del 1.00 y cerca del 0.90 (91%).
+
+La probabilidad de no recurrencia bioquímica al año de seguimiento es de aproximadamente 91%
+
+## 3.5 Mediana de supervivencia
+
+```{r}
+survfit(Surv(Tiempo_hasta_recurrencia, Estado_Recurrencia) ~ 1, data = data_sangre)
+```
+
+**El valor NA indica que la curva de Kaplan-Meier nunca alcanzó el punto en el que la probabilidad de supervivencia cae al 50%. La probabilidad más baja de no recurrencia se mantuvo alrededor del 70–75% incluso al final del seguimiento, lo que significa que más de la mitad de los pacientes permanecieron libres de recurrencia bioquímica durante todo el estudio.**
+
+**Es decir: la mediana de supervivencia no puede calcularse porque está por encima del tiempo máximo observado en la cohorte: el seguimiento terminó antes de que la mitad de los pacientes presentara el evento.**
+
+La mayoría de los pacientes (\>50) no sufrieron una recurrencia bioquímica durante el tiempo que duró el estudio.
+
+## 3.6 Reporte
+
+```{r}
+
+survfit(Surv(Tiempo_hasta_recurrencia, Estado_Recurrencia) ~ 1, data = data_sangre) %>% 
+  gtsummary::tbl_survfit(
+    times = 12.00, 
+    label_header = "Probabilidad de No Recurrencia a 1 año (IC 95%)"
+  )
+```
+
+## 3.7 Tiempo de supervivencia entre 2 grupos
+
+### Prueba de long-rank
+
+**Hipótesis Nula (H0):** No hay diferencia en la probabilidad de no recurrencia bioquímica entre los grupos "Raza_afroamericana=No" y "Raza_afroamericana=Sí". Las curvas de supervivencia son iguales.
+
+**Hipótesis Alternativa (H1):** Sí hay una diferencia en la probabilidad de no recurrencia bioquímica entre los dos grupos. Las curvas de supervivencia son diferentes.
+
+```{r}
+survdiff(Surv(Tiempo_hasta_recurrencia, Estado_Recurrencia) ~ Raza_afroamericana, data = data_sangre)
+```
+
+Debido a que el P valor (0.03) \< 0.05, se rechaza la hipotesis nula (H0). y se concluye que Sí hay una diferencia en la probabilidad de no recurrencia bioquímica entre los dos grupos. Las curvas de supervivencia son diferentes.
+
+```{r}
+survfit2(Surv(Tiempo_hasta_recurrencia, Estado_Recurrencia) ~ Raza_afroamericana, data = data_sangre) |>
+  ggsurvfit() +
+  labs(
+    x = "meses",
+    y = "Supervivencia global"
+  ) + 
+  add_confidence_interval() +
+  add_risktable() +
+  add_pvalue(caption = "Log-rank {p.value}")
+```
+
+La curva de los pacientes no afroamericanos (roja) se situó consistentemente por encima de la curva de los pacientes afroamericanos (turquesa). Esto significa que los pacientes no afroamericanos mostraron una mayor probabilidad de no recurrencia (mejor pronóstico) en comparación con los pacientes afroamericanos a lo largo del periodo de estudio.
+
+## 4 Regresion de Cox
+
+Se usaran las variables:
+
+-   Tiempo_hasta_recurrencia: **tiempo de seguimiento** **en Meses**
+
+-   Estado_Recurrencia: **Evento (1) = "Sí" o Censura (0) = "No"**
+
+-   Raza_afroamericana: **factor de comparacion "No" o "Sí"**
+
+```{r}
+coxph(Surv(Tiempo_hasta_recurrencia, Estado_Recurrencia == "1") ~ Raza_afroamericana, data = data_sangre)
+```
+
+```{r}
+coxph(Surv(Tiempo_hasta_recurrencia, Estado_Recurrencia == "1") ~ Raza_afroamericana, data = data_sangre) %>% 
+  tbl_regression(exp = TRUE) 
+```
+
+HR \> 1 indica una tasa mayor:
+
+El valor de 1.91 en el Hazard Ratio (HR) para el grupo "Sí" (Raza afroamericana) significa que los pacientes afroamericanos tienen un riesgo 91% mayor (casi el doble de riesgo) de sufrir una recurrencia bioquímica en cualquier momento..
+
+El p-valor de 0.038 es menor que 0.05, lo que indica que esta diferencia de riesgo es estadísticamente significativa y no se debe al azar.
+
+El IC 95% va de 1.04 a 3.52. Dado que este intervalo no incluye el 1.0, confirma que el riesgo de los pacientes afroamericanos es significativamente mayor.
+
+## 4.1 Reporte para multiples variables
+
+```{r}
+tabla_uv_cox <- data_sangre %>% 
+  gtsummary::tbl_uvregression(
+    include = c(
+      Raza_afroamericana, 
+      Edad_mediana_GR,         
+      Volumen_prostata,         
+      PSA_preoperatorio,       
+      Gleason_biopsia          
+    ),
+    y = Surv(Tiempo_hasta_recurrencia, Estado_Recurrencia),
+    method = survival::coxph,
+    exponentiate = TRUE,
+    conf.int = TRUE,
+    hide_n = TRUE,
+    add_estimate_to_reference_rows = FALSE,
+    pvalue_fun = ~ gtsummary::style_pvalue(.x, digits = 3),
+    estimate_fun = ~ gtsummary::style_number(.x, digits = 2),
+    label = list(
+      Raza_afroamericana ~ "Raza Afroamericana",
+      Edad_mediana_GR ~ "Edad (en años)",
+      Volumen_prostata ~ "Volumen de próstata (mL)",
+      PSA_preoperatorio ~ "PSA Preoperatorio (ng/mL)",
+      Gleason_biopsia ~ "Gleason de Biopsia"
+    )
+  ) %>%  
+  gtsummary::bold_p(t = 0.05) %>%
+  gtsummary::modify_header(estimate = "**HR NO ajustado**", p.value = "**Valor p**")
+
+tabla_uv_cox
+```

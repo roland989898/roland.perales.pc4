@@ -1,0 +1,224 @@
+---
+title: "PC3-2"
+author: "Roland ever Perales Inocente"
+format: html
+editor: visual
+---
+
+## 1. Activacion de paquetes
+
+```{r}
+library(tidyverse)
+library(here)
+library(rio)
+library(gtsummary)
+library(car)
+library(survival)
+library(performance)
+```
+
+## 2. Importacion y resumen de base de datos grupo 03"almac_sangre.csv"
+
+```{r}
+data_sangre <- import(here("data", "almac_sangre.csv"))
+str(data_sangre)
+```
+
+## 2. Analisis univariado
+
+La variable Y sera BN_positivo, que representa se la hiperplasia prostatica en benigna "Si" o si es maligna "no", y las variables X seran: Edad, Raza_afroamericana, Volumen_prostata, Volumen_tumoral, PSA_preoperatorio y Tiempo_hasta_recurrencia.
+
+## 2.1 Factorizacion de la base de datos
+
+```{r}
+data_sangre_factorizada <- data_sangre %>%
+  mutate(
+    Grupo_edad_GR = factor(
+      Grupo_edad_GR, 
+      levels = c("Joven", "Intermedio", "Mayor"), 
+      ordered = TRUE
+    ),
+    
+    Recurrencia_bioquimica = relevel(as.factor(Recurrencia_bioquimica), ref = "No"),
+    Censor = relevel(as.factor(Censor), ref = "No"),
+    BN_positivo = relevel(as.factor(BN_positivo), ref = "No"),
+    Raza_afroamericana = relevel(as.factor(Raza_afroamericana), ref = "No"),
+    Historia_familiar = relevel(as.factor(Historia_familiar), ref = "No"),
+    Terapia_previa = relevel(as.factor(Terapia_previa), ref = "No"),
+    Terapia_adyuvante = relevel(as.factor(Terapia_adyuvante), ref = "No"),
+    Radioterapia_adyuvante = relevel(as.factor(Radioterapia_adyuvante), ref = "No"),
+    Confinamiento_organo = relevel(as.factor(Confinamiento_organo), ref = "Sí"), 
+    Volumen_tumoral = as.factor(Volumen_tumoral),
+    Estadio_T = as.factor(Estadio_T),
+    Gleason_biopsia = as.factor(Gleason_biopsia),
+    Gleason_quirurgico = as.factor(Gleason_quirurgico)
+    
+  ) %>%
+  
+  na.omit()
+```
+
+## 2.2 Tabla de resultados
+
+```{r}
+tabla_reg_log_univ <- data_sangre_factorizada %>%
+  tbl_uvregression(
+    include = c(Edad, Raza_afroamericana, Volumen_prostata, 
+                Volumen_tumoral, PSA_preoperatorio, Tiempo_hasta_recurrencia),
+    y = BN_positivo,
+    method = glm,
+    method.args = list(family = binomial),
+    exponentiate = TRUE, 
+    conf.int = TRUE,
+    label = list(
+      Edad ~ "Edad (años)",
+      Raza_afroamericana ~ "Raza afroamericana",
+      Volumen_prostata ~ "Volumen prostático",
+      Volumen_tumoral ~ "Volumen tumoral",
+      PSA_preoperatorio ~ "PSA preoperatorio (ng/mL)",
+      Tiempo_hasta_recurrencia ~ "Tiempo hasta recurrencia"
+    ),
+    pvalue_fun = ~ style_pvalue(.x, digits = 3),
+    estimate_fun = ~ style_number(.x, digits = 2)
+  ) %>%
+  bold_labels() %>%
+  bold_p(t = 0.05) %>% 
+  modify_header(
+    estimate = "**OR No Ajustado**", 
+    p.value = "**Valor p**"
+  )
+
+tabla_reg_log_univ
+```
+
+Dentro de las variables numericas tan solo eel PSA preoperatorio presentan un OR mayor a 1 sugiriendo asociacion positiva a la variable desenlace. Por otro lado, a excepcion del tiempo hasta recurriencia y volumen prostatico, las variables presentan un valor P \< 0.05, representando una asociación estadísticamente significativa.
+
+-   Los pacientes de Raza Afroamericana (Sí) tienen 2.88 veces las posibilidades de tener un resultado Benigno comparado con los pacientes No afroamericanos.
+
+-   Por cada aumento de 1 de PSA, las posibilidades de tener un resultado Benigno aumentan en un 10%(1.10 - 1.00 = 0.10).
+
+-   Por cada aumento de un año en la edad, las posibilidades de tener un resultado Benigno se reducen en un 8%
+
+-   Tener un Volumen Tumoral Medio reduce las posibilidades a 0.18 veces (o una reducción del 82%) de tener un resultado Benigno
+
+## 3 Analisis multivariado
+
+## 3.1 ajuste del modelo inicial
+
+```{r}
+sangre_multi = glm(
+  BN_positivo ~ Edad + Raza_afroamericana + Volumen_prostata + Volumen_tumoral + PSA_preoperatorio + 
+    Tiempo_hasta_recurrencia,
+  data = data_sangre_factorizada,
+  family = binomial(link = "logit")
+  )
+```
+
+## 3.2 Backward
+
+```{r}
+sangre_backward <- sangre_multi |>
+  step(direction = "backward", trace = FALSE)
+```
+
+## 3.3 Fordward
+
+```{r}
+sangre_forward <- sangre_multi |>
+  step(direction = "forward", trace = FALSE)
+```
+
+## 3.4 Stepwise
+
+```{r}
+sangre_stepwise <- sangre_multi |>
+  step(direction = "both", trace = FALSE)
+```
+
+## 3.5 Estimacion de AIC
+
+```{r}
+summary(sangre_backward)
+summary(sangre_forward)
+summary(sangre_stepwise)
+```
+
+Los modelos de Backward y Stepwise mostraron mejor AIC (111.41) que el modelo Forward (114.63). Esto significa que, al eliminar las variables Volumen_prostata y Tiempo_hasta_recurrencia de la fórmula, el modelo mantiene una buena capacidad predictiva (o incluso la mejora ligeramente) mientras se vuelve más simple y parsimonioso.
+
+## 3.6 Evaluación de colinealidad (VIF)
+
+```{r}
+performance::check_collinearity(sangre_backward, ci = NULL)
+performance::check_collinearity(sangre_forward, ci = NULL)
+performance::check_collinearity(sangre_stepwise, ci = NULL)
+```
+
+El VIF máximo fue de solo 1.18 y la mayoría estuvo cerca de 1.0, lo que confirma que las variables son altamente independientes, asegurando que la estimación del efecto de cada predictor sobre la probabilidad de BN_positivo es precisa y no está sesgada por la interrelación con otros predictores.
+
+## 3.7 Modelo final
+
+Los modelos de Backward y Stepwise mostraron mejor desempeño a comparacion del modelo Forward al eliminar las variables Volumen_prostata y Tiempo_hasta_recurrencia de la fórmula.
+
+## 3.8 Reporte del análisis univariado y multivariado
+
+```{r}
+sangre_univ <- data_sangre_factorizada %>%
+  tbl_uvregression(
+    include = c(Edad, Raza_afroamericana, Volumen_prostata, Volumen_tumoral, 
+                PSA_preoperatorio, Tiempo_hasta_recurrencia),
+    y = BN_positivo,
+    method = glm,
+    method.args = list(family = binomial),
+    exponentiate = TRUE,
+    conf.int = TRUE,
+    hide_n = TRUE,
+    add_estimate_to_reference_rows = FALSE,
+    pvalue_fun = ~ style_pvalue(.x, digits = 3),
+    estimate_fun = ~ style_number(.x, digits = 2),
+    label = list(
+      Edad ~ "Edad (años)",
+      Raza_afroamericana ~ "Raza afroamericana",
+      Volumen_prostata ~ "Volumen prostático",
+      Volumen_tumoral ~ "Volumen tumoral",
+      PSA_preoperatorio ~ "PSA preoperatorio (ng/mL)",
+      Tiempo_hasta_recurrencia ~ "Tiempo hasta recurrencia"
+    )
+  ) %>%
+  bold_labels() %>%
+  bold_p(t = 0.05) %>%
+  modify_header(estimate = "**OR**", p.value = "**Valor p**")
+```
+
+```{r}
+sangre_multi <- glm(
+  formula = BN_positivo ~ Edad + Raza_afroamericana + Volumen_tumoral + PSA_preoperatorio,
+  family = binomial(link = "logit"),
+  data = data_sangre_factorizada
+) %>%
+  tbl_regression(
+    exponentiate = TRUE,
+    conf.int = TRUE,
+    pvalue_fun = ~ style_pvalue(.x, digits = 3),
+    estimate_fun = ~ style_number(.x, digits = 2),
+    label = list(
+      Edad ~ "Edad (años)",
+      Raza_afroamericana ~ "Raza afroamericana",
+      Volumen_tumoral ~ "Volumen tumoral",
+      PSA_preoperatorio ~ "PSA preoperatorio (ng/mL)"
+    )
+  ) %>%
+  bold_labels() %>%
+  bold_p(t = 0.05) %>%
+  modify_header(estimate = "**OR**", p.value = "**Valor p**")
+```
+
+```{r}
+sangre_final <- tbl_merge(
+  list(sangre_univ, sangre_multi),
+  tab_spanner = c("**Univariado**", "**Multivariado**")
+)
+
+sangre_final
+```
+
+Al ajustar por el efecto de todas las demás variables, el único predictor que se mantuvo como significativamente independiente del desenlace BN_positivo fue el Volumen Tumoral Medio. Específicamente, tener un Volumen Tumoral Medio, comparado con el Volumen Alto (categoría de referencia), reduce significativamente las posibilidades de tener un resultado Benigno (OR = 0.27, p=0.042), sugiriendo una asociación con un mayor riesgo de Malignidad o No Benignidad. Por otro lado, los efectos observados inicialmente para la Edad, la Raza afroamericana y el PSA preoperatorio en el análisis univariado perdieron su significancia estadística en el modelo multivariado, lo que indica que su aparente efecto era confundido o explicado por la interacción con las otras variables clínicas.

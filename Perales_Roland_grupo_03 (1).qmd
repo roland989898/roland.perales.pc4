@@ -1,0 +1,99 @@
+---
+title: "PC2-3"
+author: "Roland E. Perales"
+format: html
+editor: visual
+---
+
+## PC2-3
+
+## Descarga y Activacion de paquetes
+
+```{r}
+install.packages("car")
+install.packages("tidyverse")
+install.packages("here")
+install.packages("rio")
+install.packages("gtsummary")
+install.packages("nortest")
+```
+
+```{r}
+library(tidyverse)
+library(here)
+library(rio)
+library(gtsummary)
+library(car)
+library(nortest)
+```
+
+## Importar base de datos:
+
+Debido a la incompatibilidad de las variables con las pruebas se uso otra base de datos
+
+```{r}
+data_glucosa <- import(here("data", "s09_circunf_glucosa.csv"))
+str(data_glucosa)
+```
+
+## Prueba de T student para muestras independientes:
+
+Se quiere saber si existe alguna correlacion entre las variables sexo y peso_corp_kg
+
+## Resumen y visualización
+
+```{r}
+data_glucosa |>
+  group_by(sexo) |>
+  summarise(
+    count = n(),
+    mean_peso_corp_kg = mean(peso_corp_kg, na.rm = TRUE),
+    sd_peso_corp_kg = sd(peso_corp_kg, na.rm = TRUE)
+  )
+```
+
+```{r}
+data_glucosa |>
+  filter(!is.na(sexo) & !is.na(peso_corp_kg)) |>
+  ggplot(aes(y = peso_corp_kg, x = as.factor(sexo))) +
+  geom_boxplot() +
+  labs(y = "peso corporal", x = "Sexo")
+```
+
+## Sustentos para T Student
+
+**Prueba de normalidad - Shapiro-wilk**
+
+```{r}
+data_glucosa |> 
+  filter(sexo == "Masculino") |> 
+  summarise(shapiro = list(shapiro.test(peso_corp_kg))) |> 
+  pull(shapiro)
+
+data_glucosa |> 
+  filter(sexo == "Femenino") |> 
+  summarise(shapiro = list(shapiro.test(peso_corp_kg))) |> 
+  pull(shapiro)
+```
+
+valor P\> a 0.05 por lo que no se rechaza la hipotesis nula (H0) y se concluye que las variables peso_corp_kg sigue una distribucion normal.
+
+**Prueba de homogenidad de varianzas - Prueba F**
+
+```{r}
+var.test(peso_corp_kg ~ sexo, data = data_glucosa)
+```
+
+P es \> a 0.05, por lo que se concluye que no hay una diferencia significativa entre las varianzas de sexo femeninio y masculino.
+
+## T Student
+
+H0: No hay diferencia en el peso promedio entre el grupo Femenino y el grupo Masculino
+
+H1: Hay diferencia en el peso promedio entre el grupo Femenino y el grupo Masculino
+
+```{r}
+t.test(peso_corp_kg ~ sexo, data = data_glucosa, var.equal = TRUE)
+```
+
+El P valor de la pruba de T Student es de 0.7397, P\>0.05. Se acepta la hipotesis nula (H0), se concluye que no hay evidencia estadística suficiente para afirmar que existe una diferencia significativa en el peso corporal promedio entre mujeres y hombres en esta muestra.

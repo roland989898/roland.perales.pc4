@@ -1,0 +1,192 @@
+---
+title: "PC4-2"
+author: "Perales Inocente Roland Ever"
+format: html
+editor: visual
+---
+
+## Paquetes necesarios para esta actividad
+
+```{r}
+library(mice)
+library(tidyverse)
+library(here)
+library(rio)
+library(ggmice)
+library(gtsummary)
+```
+
+## Importacion de base de datos
+
+```{r}
+data_sangre <- import(here("data", "almac_sangre.csv"))
+```
+
+## Imputacion de datos
+
+```{r}
+colSums(is.na(data_sangre))
+```
+
+## Mapa de calor
+
+```{r}
+data_sangre |>
+  select(
+      Grupo_edad_GR           ,
+      Edad_mediana_GR         ,
+      Edad                    ,
+      Raza_afroamericana      ,
+      Historia_familiar       ,
+      Volumen_prostata        ,
+      Estadio_T               ,
+      Gleason_biopsia         ,
+      Gleason_biopsia         ,
+      Confinamiento_organo    ,
+      PSA_preoperatorio       ,
+      Terapia_previa          ,
+      Unidades_transfundidas  ,
+      Gleason_quirurgico      ,
+      Terapia_adyuvante       ,
+      Radioterapia_adyuvante  ,
+      Recurrencia_bioquimica  ,
+      Censor                  ,
+      Tiempo_hasta_recurrencia,
+      BN_positivo             
+    ) |>
+  ggmice::plot_pattern(
+    square = TRUE,
+    rotate = TRUE
+  )
+```
+
+El conjunto de datos cuenta con 292 registros íntegros y únicamente 28 valores ausentes, que se concentran en ciertas variables críticas. En particular, **Estadio_T** acumula 13 vacíos y **Volumen_prostata** presenta 9, mientras que el resto de las columnas apenas muestran ausencias puntuales: **PSA_preoperatorio** (3), **Gleason_biopsia** (2) y **Tiempo_hasta_recurrencia** (1). Esto significa que la base está mayormente completa y que las inconsistencias se limitan a un pequeño grupo de pacientes con patrones definidos de datos faltantes, incluyendo un caso extremo con hasta cuatro campos sin información simultánea.
+
+## Seleccion de variables para imputacion
+
+```{r}
+data_sangre_factor =
+  data_sangre |>
+  dplyr::select(
+    Grupo_edad_GR,
+    Edad_mediana_GR,
+    Edad,
+    Raza_afroamericana,
+    Historia_familiar,
+    Volumen_prostata,
+    Volumen_tumoral,
+    Estadio_T,
+    Gleason_biopsia,
+    Confinamiento_organo,
+    PSA_preoperatorio,
+    Terapia_previa,
+    Unidades_transfundidas,
+    Gleason_quirurgico,
+    Terapia_adyuvante,
+    Radioterapia_adyuvante,
+    Recurrencia_bioquimica,
+    Censor,
+    Tiempo_hasta_recurrencia,
+    BN_positivo
+  ) |>
+  
+  mutate(across(where(is.character), as.factor))
+```
+
+```{r}
+names(data_sangre_factor)
+```
+
+## Imputacion
+
+```{r}
+data_sangre_imputada =
+  mice(
+    data_sangre_factor,
+    m = 20,
+    method = c(
+      "",          
+      "",          
+      "",          
+      "",          
+      "",          
+      "pmm",       
+      "",          
+      "logreg",    
+      "polyreg",   
+      "",          
+      "pmm",       
+      "",         
+      "",          
+      "",          
+      "",          
+      "",         
+      "",          
+      "",          
+      "pmm",      
+      ""          
+    ),
+    maxit = 20,
+    seed = 3,
+    print = FALSE
+  )
+```
+
+```{r}
+data_sangre_imputada
+```
+
+## Analisis de datos imputados
+
+```{r}
+ggmice(data_sangre_imputada, aes(x = .imp, y = Volumen_prostata)) +
+  geom_jitter(height = 0, width = 0.25) +
+  geom_boxplot(width = 0.5, size = 1, alpha = 0.55, outlier.shape = NA) +
+  labs(x = "Número de imputación", 
+       title = "Verificación: Volumen Próstata (Observado vs Imputado)")
+```
+
+```{r}
+data_sangre_imputada1 <- complete(data_sangre_imputada, "long", include = TRUE)
+```
+
+```{r}
+data_sangre_imputada1 <- data_sangre_imputada1 %>%
+  mutate(imputed = .imp > 0,
+         imputed = factor(imputed, 
+                          levels = c(FALSE, TRUE), 
+                          labels = c("Observado", "Imputado")))
+
+
+prop.table(table(data_sangre_imputada1$Estadio_T, 
+                 data_sangre_imputada1$imputed), 
+           margin = 2)
+```
+
+El ejercicio de imputación muestra dos hallazgos complementarios: por un lado, el método **Predictive Mean Matching (PMM)** generó para los 9 pacientes con datos faltantes un rango amplio de volúmenes prostáticos, desde valores muy bajos hasta cifras elevadas (150–250 cc), reflejando la influencia de los outliers y la incertidumbre propia de trabajar con pocos casos; por otro, la imputación mediante **regresión logística** mantuvo casi sin cambios la distribución de los estadios clínicos, con variaciones mínimas de 0.2–0.3% entre categorías leves y avanzadas. En conjunto, los resultados evidencian que las técnicas aplicadas producen valores plausibles y coherentes con la base original, aunque en el caso del volumen prostático la variabilidad es mayor debido a la presencia de extremos en los datos.
+
+## Uso de base de datos
+
+```{r}
+tabla_sangre <- 
+  data_sangre_imputada |>
+  with(glm(Recurrencia_bioquimica ~ Edad + PSA_preoperatorio + 
+             Volumen_prostata + Estadio_T + Gleason_biopsia,
+           family = binomial(link = "logit"))) |>
+  tbl_regression(
+    exponentiate = TRUE, 
+    label = list(
+      Edad ~ "Edad (años)",
+      PSA_preoperatorio ~ "PSA Preoperatorio (ng/mL)",
+      Volumen_prostata ~ "Volumen Próstata (cc)",
+      Estadio_T ~ "Estadio T Clínico",
+      Gleason_biopsia ~ "Gleason de Biopsia"
+    )
+  ) |>
+  bold_p(t = 0.05) |> 
+  modify_header(estimate = "**OR ajustado**", p.value = "**Valor p**") |>
+  modify_caption("Modelo de Regresión Logística (Datos Imputados)")
+
+
+tabla_sangre
+```
