@@ -1,0 +1,105 @@
+---
+title: "Pc1-3"
+author: "EDWING NORBERTO SINCHEZ RUIZ - Camila Jazmín Fonseca guido - Luz Angelita huamani Ccoyllo - Perales Inocente roland ever"
+format: html
+editor: visual
+---
+
+## 1 Descarga y activacion de paquetes PC1-3
+
+Flextable, gtsummary y finalfit son paquetes esenciales en R para la creación de tablas que facilitan la presentación de resultados. Mientras **flextable** se centra en la personalización estética de tablas para diversos formatos de informes, **gtsummary** se especializa en la generación de tablas de resumen estadístico listas para su publicación, y **finalfit** está diseñado para agilizar el flujo de trabajo del análisis de datos en el ámbito de la salud, ofreciendo herramientas específicas para la exploración y creación de modelos de regresión y tablas explicativas. Juntos, estos paquetes permiten a los analistas de datos, especialmente a los investigadores, presentar sus hallazgos de manera clara, estructurada y profesional.
+
+En esta ocasion se usaran en conjunto para el resumen de datos de la base de datos "bac_aguda.csv" y la creacion de tablas
+
+```{r}
+install.packages("tidyverse")
+install.packages("here")
+install.packages("rio")
+install.packages("finalfit")
+install.packages("flextable")
+install.packages("gtsummary")
+```
+
+```{r}
+library(tidyverse)
+library(here)
+library(rio)
+library(gtsummary) 
+library(finalfit) 
+library(flextable) 
+```
+
+## 2 Importacion de datos grupo 03 "bac_aguda"
+
+```{r}
+data_aguda = import(here("data", "bac_aguda.csv"))
+```
+
+```{r}
+str(data_aguda)
+```
+
+La base de datos "bac_aguda" ahora: data_aguda, presenta 581 observaciones y 22 varaibles de las cuales existen numericas y categoricas
+
+## 3 Analisis descriptivo
+
+la base de datos "data_agua" trata sobre una infeccion bacteriana que produce meningitis aguda
+
+```{r}
+table(data_aguda$meningitis_bacteriana_aguda, useNA = "ifany")
+```
+
+284 casos descartados, 217 presentes y 80 NA
+
+```{r}
+prop.table(table(data_aguda$meningitis_bacteriana_aguda, useNA = "ifany"))
+```
+
+48%, 37% y 13% respectivamente
+
+## 3 Variables continuas
+
+```{r}
+summary(data_aguda)
+```
+
+## 3 Tabla
+
+```{r}
+data_aguda |>
+  select(edad, sexo, leucocitos_sangre, neutrofilos_sangre_pct, glucosa_sangre) |>
+  tbl_summary()
+```
+
+Tabla en base a la presencia de meningitis
+
+```{r}
+data_aguda |> 
+  select(edad, sexo, leucocitos_sangre, neutrofilos_sangre_pct, glucosa_sangre, meningitis_bacteriana_aguda) |> 
+  tbl_summary(by = meningitis_bacteriana_aguda)
+```
+
+Traduccion al español
+
+```{r}
+theme_gtsummary_language(language = "es") 
+theme_gtsummary_journal(journal = "jama")
+```
+
+```{r}
+data_aguda_0 = data_aguda |>
+  mutate(
+    edad = ff_label(edad, "Edad (años)"),
+    sexo = as.factor(sexo) |> ff_label("Sexo"),
+    meningitis_bacteriana_aguda = as.factor(meningitis_bacteriana_aguda) |>
+      ff_label("Meningitis bacteriana aguda"),
+    leucocitos_sangre = ff_label(leucocitos_sangre, "Leucocitos en sangre (células/mm³)"),
+    glucosa_sangre = ff_label(glucosa_sangre, "Glucosa en sangre (mg/dL)")
+  )
+```
+
+```{r}
+data_aguda_0 |> 
+  select(edad, sexo, leucocitos_sangre, neutrofilos_sangre_pct, glucosa_sangre, meningitis_bacteriana_aguda) |> 
+  tbl_summary(by = meningitis_bacteriana_aguda)
+```

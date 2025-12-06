@@ -1,0 +1,83 @@
+---
+title: "PC2-2"
+author: "Roland P. Inocente - Camila Fonseca Guido - Edwing Noberto Sinchez Ruiz - Luz Angelita Huamani Ccoyllo"
+format: html
+editor: visual
+---
+
+## Activacion de paquetes
+
+```{r}
+library(tidyverse)
+library(here)
+library(rio)
+library(gtsummary)
+library(car)
+```
+
+## Importacion de datos grupo 03 "bac_aguda"
+
+```{r}
+data_aguda = import(here("data", "bac_aguda.csv"))
+```
+
+## Prueba de Shapiro-wilk
+
+para este primer ejemplo se usa la variable Edad para poder analizar si es una variable continua.
+
+H0: La variable edad tiene una distribucion normal
+
+H1: La variable edad no tiene una distribucion normal
+
+```{r}
+shapiro.test(data_aguda$edad)
+```
+
+Dado que el p-valor es mucho menor que 0.05, se rechaza la hipótesis nula (H0).
+
+Para el segundo ejemplo se usa la variable Glucosa_sangre para poder analizar si es una variable continua.
+
+H0: La variable Glucosa_sangre tiene una distribucion normal
+
+H1: La variable Glucosa_sangre no tiene una distribucion normal
+
+```{r}
+shapiro.test(data_aguda$glucosa_sangre)
+```
+
+Dado que el p-valor es mucho menor que 0.05, se rechaza la hipótesis nula (H0).
+
+## Regresion lineal simple
+
+```{r}
+modelo_lcr_simple <- lm(glucosa_lcr ~ leucocitos_lcr, data = data_aguda)
+summary(modelo_lcr_simple)
+
+ggplot(data = data_aguda, aes(x = leucocitos_lcr, y = glucosa_lcr)) +
+  geom_point(color = "purple", alpha = 0.7) +
+  geom_smooth(method = "lm", se = TRUE, color = "orange") +
+  labs(
+    title = "Relación entre Leucocitos en LCR y Glucosa en LCR",
+    x = "Leucocitos en LCR",
+    y = "Glucosa en LCR"
+  ) +
+  theme_minimal()
+```
+
+## Regresion con transformacion logaritmica
+
+```{r}
+modelo_lcr_log <- lm(glucosa_lcr ~ log(leucocitos_lcr + 1), data = data_aguda)
+summary(modelo_lcr_log)
+
+ggplot(data = data_aguda, aes(x = leucocitos_lcr, y = glucosa_lcr)) +
+  geom_point(color = "purple", alpha = 0.7) +
+  geom_smooth(method = "lm", formula = y ~ log(x + 1), se = TRUE, color = "darkblue") +
+  scale_x_continuous(trans = 'log1p') +
+  labs(
+    title = "Relación entre Leucocitos en LCR (Log) y Glucosa en LCR",
+    x = "Leucocitos en LCR (Escala Logarítmica)",
+    y = "Glucosa en LCR"
+  ) +
+  theme_minimal()
+```
